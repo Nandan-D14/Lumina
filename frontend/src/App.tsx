@@ -269,7 +269,7 @@ export default function App() {
 
           <button
             onClick={() => setIsSettingsOpen(true)}
-            className="p-2 bg-white rounded-full shadow-sm text-gray-400 hover:text-[#007AFF] transition-colors border border-gray-100"
+            className="p-2 bg-gray-100 rounded-full shadow-sm text-gray-700 hover:text-[#007AFF] hover:bg-gray-200 transition-colors border border-gray-200"
             title="Open Settings"
           >
             <Settings2 size={20} />

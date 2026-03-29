@@ -78,7 +78,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     />
                   </div>
                   <button 
-                    onClick={() => alert("Static Save Clicked! (Not connected to backend)")}
+                    onClick={onClose}
                     className="h-[50px] w-[50px] flex items-center justify-center bg-white border border-gray-200 rounded-xl text-gray-600 hover:text-[#007AFF] hover:border-[#007AFF]/30 shadow-sm transition-all" 
                     title="Save"
                   >
