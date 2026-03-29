@@ -14,9 +14,9 @@ class Settings:
     app_name: str = os.getenv("AGENT_APP_NAME", "insight_orchestrator")
     default_model: str = os.getenv("AGENT_MODEL", "gemini-3-flash-preview")
     database_url: str = os.getenv("DATABASE_URL", "")
-    kilo_code_api: str = os.getenv("KILO_API_KEY", os.getenv("KILO_CODE_API", "")).strip().strip("'\"").strip()
-    kilo_code_model: str = os.getenv("KILO_MODEL", os.getenv("KILO_CODE_MODEL", "")).strip().strip("'\"").strip()
-    kilo_code_endpoint: str = os.getenv("KILO_URL", os.getenv("KILO_CODE_ENDPOINT", "https://api.kilo.ai/api/gateway")).strip().strip("'\"").strip()
+    openrouter_api_key: str = os.getenv("OPENROUTER_API_KEY", os.getenv("OPENROUTER_API_KEY_FALLBACK", "")).strip().strip("'\"").strip()
+    openrouter_model: str = os.getenv("OPENROUTER_MODEL", os.getenv("OPENROUTER_MODEL_FALLBACK", "")).strip().strip("'\"").strip()
+    openrouter_endpoint: str = os.getenv("OPENROUTER_URL", os.getenv("OPENROUTER_URL_FALLBACK", "https://openrouter.ai/api/v1")).strip().strip("'\"").strip()
     cors_origins: tuple[str, ...] = ("*",)
     http_timeout_seconds: float = float(os.getenv("HTTP_TIMEOUT_SECONDS", "20"))
     scrape_max_chars: int = int(os.getenv("SCRAPE_MAX_CHARS", "12000"))
@@ -30,8 +30,8 @@ class Settings:
             or os.getenv("GOOGLE_CLOUD_PROJECT")
         )
 
-    def has_kilo_auth(self) -> bool:
-        return bool(self.kilo_code_api and self.kilo_code_model and self.kilo_code_endpoint)
+    def has_openrouter_auth(self) -> bool:
+        return bool(self.openrouter_api_key and self.openrouter_model and self.openrouter_endpoint)
 
 
 @lru_cache
