@@ -465,33 +465,30 @@ class InsightOrchestrator:
         yield json.dumps({"type": "result", "data": final_package.model_dump(mode="json")}) + "\n"
 
     def _kilo_endpoint_candidates(self) -> list[str]:
+        # Always strip trailing slashes
         endpoint = self._settings.kilo_code_endpoint.strip().rstrip("/")
         if not endpoint:
             return []
 
-        candidates: list[str] = [endpoint]
-        if not endpoint.endswith("/chat/completions") and not endpoint.endswith("/v1/chat/completions"):
-            candidates.extend([
-                f"{endpoint}/chat/completions",
-                f"{endpoint}/v1/chat/completions",
-                f"{endpoint}/openai/v1/chat/completions",
-            ])
-
-        deduped: list[str] = []
-        seen: set[str] = set()
-        for candidate in candidates:
-            if candidate in seen:
-                continue
-            seen.add(candidate)
-            deduped.append(candidate)
-        return deduped
+        # If the user provides a direct chat/completions endpoint, try that first.
+        # Otherwise, assume it's a base URL and append /chat/completions just like the OpenAI Python Client.
+        if endpoint.endswith("/chat/completions"):
+            return [endpoint]
+        
+        return [
+            f"{endpoint}/chat/completions",
+            endpoint,  # Fallback to the raw endpoint in case it handles its own routing
+            f"{endpoint}/v1/chat/completions",
+        ]
 
     @staticmethod
     def _looks_like_endpoint_miss(response: httpx.Response) -> bool:
         content_type = response.headers.get("content-type", "").lower()
         body = response.text.lstrip().lower()
         is_html = "text/html" in content_type or body.startswith("<!doctype html") or body.startswith("<html")
-        if response.status_code in {404, 405} or (response.status_code >= 400 and is_html):
+        
+        # If it's an HTML error page, it's definitely a bad endpoint or gateway miss.
+        if response.status_code >= 400 and is_html:
             return True
 
         if response.status_code == 400:
@@ -501,9 +498,14 @@ class InsightOrchestrator:
                 "only accepts the path",
                 "/chat/completions",
             )
-            lowered = response.text.lower()
-            if all(marker in lowered for marker in invalid_path_markers):
+            if all(marker in body for marker in invalid_path_markers):
                 return True
+
+        # If it returned a JSON 404 (e.g. Model not found, or No endpoints available), 
+        # it is a REAL API error, not an endpoint miss. Don't swallow it.
+        # (Generic nginx 404s are usually HTML, which is caught above).
+        if response.status_code in {404, 405} and "application/json" not in content_type and not body.startswith("{"):
+            return True
 
         return False
 
