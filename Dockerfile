@@ -26,7 +26,7 @@ COPY --from=frontend-build /frontend/dist ./frontend/dist
 
 # Expose cloud run port
 ENV PORT=8080
-EXPOSE 8080
+EXPOSE $PORT
 
-# Run
-CMD ["uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8080"]
+# Run using the $PORT environment variable
+CMD sh -c "uvicorn backend.app.main:app --host 0.0.0.0 --port ${PORT}"
