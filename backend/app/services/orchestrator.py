@@ -517,12 +517,15 @@ class InsightOrchestrator:
         headers = {
             "Authorization": f"Bearer {self._settings.kilo_code_api}",
             "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": "curl/8.7.1",
         }
 
         last_response: httpx.Response | None = None
         last_exception: Exception | None = None
+        first_miss: httpx.Response | None = None
 
-        async with httpx.AsyncClient(timeout=self._settings.http_timeout_seconds * 2) as client:
+        async with httpx.AsyncClient(timeout=self._settings.http_timeout_seconds * 2, follow_redirects=True) as client:
             for endpoint in candidates:
                 try:
                     response = await client.post(endpoint, headers=headers, json=payload)
@@ -531,17 +534,22 @@ class InsightOrchestrator:
                     continue
 
                 if self._looks_like_endpoint_miss(response):
+                    if first_miss is None:
+                        first_miss = response
                     last_response = response
                     continue
 
                 return response
 
-        if last_response is not None:
-            preview = last_response.text.strip()[:180]
+        # If we failed, prefer showing the error for the primary candidate (first_miss) rather than the last fallback candidate
+        error_resp = first_miss if first_miss is not None else last_response
+
+        if error_resp is not None:
+            preview = error_resp.text.strip()[:180]
             raise HTTPException(
                 status_code=502,
                 detail=(
-                    f"Kilo Code endpoint appears invalid (status {last_response.status_code}). "
+                    f"Kilo Code endpoint appears invalid (status {error_resp.status_code}). "
                     f"Tried: {', '.join(candidates)}. Response preview: {preview}"
                 ),
             )
