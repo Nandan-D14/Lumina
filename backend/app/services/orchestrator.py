@@ -207,16 +207,7 @@ class InsightOrchestrator:
             "temperature": 0.2,
         }
 
-        headers = {
-            "Authorization": f"Bearer {self._settings.kilo_code_api}",
-            "Content-Type": "application/json",
-        }
-
-        try:
-            async with httpx.AsyncClient(timeout=self._settings.http_timeout_seconds * 2) as client:
-                response = await client.post(self._settings.kilo_code_endpoint, headers=headers, json=payload)
-        except httpx.HTTPError as exc:
-            raise HTTPException(status_code=502, detail=f"Kilo Code request failed: {exc}") from exc
+        response = await self._post_kilo_request(payload)
 
         if response.status_code == 429:
             raise HTTPException(status_code=429, detail="Kilo Code quota/rate limit exceeded. Retry shortly or update plan limits.")
@@ -411,28 +402,23 @@ class InsightOrchestrator:
         user_prompt = f"User prompt:\n{request.prompt}\n\nNormalized corpus:\n{corpus}\n\nTables JSON:\n{json.dumps([table.model_dump(mode='json') for table in ingestion.tables], ensure_ascii=False)}\n\nMax visualizations: {request.options.max_visualizations}"
 
         payload = {"model": self._settings.kilo_code_model, "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}], "temperature": 0.2}
-        headers = {"Authorization": f"Bearer {self._settings.kilo_code_api}", "Content-Type": "application/json"}
-
         try:
-            async with httpx.AsyncClient(timeout=self._settings.http_timeout_seconds * 2) as client:
-                request_task = asyncio.create_task(
-                    client.post(self._settings.kilo_code_endpoint, headers=headers, json=payload)
-                )
-                heartbeat_messages = [
-                    "Model is reading normalized sources...",
-                    "Model is computing metrics and trend deltas...",
-                    "Model is drafting visual specifications...",
-                    "Model is producing detailed report output...",
-                ]
-                heartbeat_index = 0
-                while not request_task.done():
-                    heartbeat = heartbeat_messages[min(heartbeat_index, len(heartbeat_messages) - 1)]
-                    yield json.dumps({"type": "step", "message": heartbeat}) + "\n"
-                    heartbeat_index += 1
-                    await asyncio.sleep(1.2)
-                response = await request_task
-        except httpx.HTTPError as exc:
-            yield json.dumps({"type": "error", "message": f"Kilo Code request failed: {exc}"}) + "\n"
+            request_task = asyncio.create_task(self._post_kilo_request(payload))
+            heartbeat_messages = [
+                "Model is reading normalized sources...",
+                "Model is computing metrics and trend deltas...",
+                "Model is drafting visual specifications...",
+                "Model is producing detailed report output...",
+            ]
+            heartbeat_index = 0
+            while not request_task.done():
+                heartbeat = heartbeat_messages[min(heartbeat_index, len(heartbeat_messages) - 1)]
+                yield json.dumps({"type": "step", "message": heartbeat}) + "\n"
+                heartbeat_index += 1
+                await asyncio.sleep(1.2)
+            response = await request_task
+        except HTTPException as exc:
+            yield json.dumps({"type": "error", "message": str(exc.detail)}) + "\n"
             return
 
         if response.status_code >= 400:
@@ -477,6 +463,77 @@ class InsightOrchestrator:
         self._repository.save(StoredAnalysis(analysis_id=final_package.analysis_id, user_id=user_id, session_id=ingestion.session_id, filename=final_ref.name, version=final_ref.version))
 
         yield json.dumps({"type": "result", "data": final_package.model_dump(mode="json")}) + "\n"
+
+    def _kilo_endpoint_candidates(self) -> list[str]:
+        endpoint = self._settings.kilo_code_endpoint.strip().rstrip("/")
+        if not endpoint:
+            return []
+
+        candidates: list[str] = [endpoint]
+        if not endpoint.endswith("/chat/completions") and not endpoint.endswith("/v1/chat/completions"):
+            candidates.extend([
+                f"{endpoint}/chat/completions",
+                f"{endpoint}/v1/chat/completions",
+                f"{endpoint}/openai/v1/chat/completions",
+            ])
+
+        deduped: list[str] = []
+        seen: set[str] = set()
+        for candidate in candidates:
+            if candidate in seen:
+                continue
+            seen.add(candidate)
+            deduped.append(candidate)
+        return deduped
+
+    @staticmethod
+    def _looks_like_endpoint_miss(response: httpx.Response) -> bool:
+        content_type = response.headers.get("content-type", "").lower()
+        body = response.text.lstrip().lower()
+        is_html = "text/html" in content_type or body.startswith("<!doctype html") or body.startswith("<html")
+        return response.status_code in {404, 405} or (response.status_code >= 400 and is_html)
+
+    async def _post_kilo_request(self, payload: dict[str, Any]) -> httpx.Response:
+        candidates = self._kilo_endpoint_candidates()
+        if not candidates:
+            raise HTTPException(status_code=500, detail="Kilo Code endpoint is not configured.")
+
+        headers = {
+            "Authorization": f"Bearer {self._settings.kilo_code_api}",
+            "Content-Type": "application/json",
+        }
+
+        last_response: httpx.Response | None = None
+        last_exception: Exception | None = None
+
+        async with httpx.AsyncClient(timeout=self._settings.http_timeout_seconds * 2) as client:
+            for endpoint in candidates:
+                try:
+                    response = await client.post(endpoint, headers=headers, json=payload)
+                except httpx.HTTPError as exc:
+                    last_exception = exc
+                    continue
+
+                if self._looks_like_endpoint_miss(response):
+                    last_response = response
+                    continue
+
+                return response
+
+        if last_response is not None:
+            preview = last_response.text.strip()[:180]
+            raise HTTPException(
+                status_code=502,
+                detail=(
+                    f"Kilo Code endpoint appears invalid (status {last_response.status_code}). "
+                    f"Tried: {', '.join(candidates)}. Response preview: {preview}"
+                ),
+            )
+
+        if last_exception is not None:
+            raise HTTPException(status_code=502, detail=f"Kilo Code request failed: {last_exception}") from last_exception
+
+        raise HTTPException(status_code=502, detail=f"Kilo Code request failed. Tried endpoints: {', '.join(candidates)}")
 
     def artifact_context_for(self, analysis_id: str) -> ArtifactContext:
         stored = self._repository.get(analysis_id)
