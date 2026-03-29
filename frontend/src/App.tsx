@@ -108,11 +108,6 @@ export default function App() {
     if (e) e.preventDefault();
     if (!promptText.trim() && !selectedFile) return;
 
-    if (!geminiApiKey.trim()) {
-      setError('Gemini API key is required. Click settings and add your key before running analysis.');
-      return;
-    }
-
     const effectivePrompt = promptText.trim() || (selectedFile ? `Analyze uploaded file: ${selectedFile.name}` : 'Analyze the provided source.');
 
     setIsAnalyzing(true);
