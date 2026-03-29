@@ -18,9 +18,9 @@ Research context:
 {research_branch?}
 
 Extract:
-- a concise summary
-- the most important findings
-- metrics that should appear in the final insight package
+- a detailed executive summary (context, drivers, implications, and risks)
+- 8 to 14 concrete findings with clear analytical value
+- 6 to 12 metrics that should appear in the final insight package when available
 
 Return grounded output only.
 """

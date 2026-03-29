@@ -21,7 +21,7 @@ Available citations:
 Review goals:
 - reject unsupported claims
 - flag visualizations that are not grounded
-- keep the package concise and accurate
+- keep the package accurate, specific, and sufficiently detailed for decision-making
 - revise the summary only when necessary
 
 If the draft is acceptable, approve it with no issues.

@@ -24,12 +24,14 @@ Research context:
 
 Constraints:
 - Return at most {max_visualizations} visualizations.
+- Prefer returning at least 4 visualizations when sufficient data exists.
 - Use line charts for ordered or time-series comparisons.
 - Use pie charts only for small, clear part-to-whole datasets.
 - Use bar charts for category comparisons.
 - Use table visualizations when narrative or mixed data is better shown in tabular form.
 - Only include labels and numeric values when they are grounded.
- - If the normalized tables are helpful, call the table_reasoner_agent tool and adapt its output to the final visualization list.
+- Ensure chart titles and reasons are explanatory, not generic.
+- If the normalized tables are helpful, call the table_reasoner_agent tool and adapt its output to the final visualization list.
 """
 
 

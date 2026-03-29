@@ -10,7 +10,7 @@ from .domain import SourceInput, TextSourceInput
 class AnalyzeOptions(BaseModel):
     allow_web_research: bool = False
     allow_scraping: bool = True
-    max_visualizations: int = Field(default=3, ge=1, le=10)
+    max_visualizations: int = Field(default=6, ge=1, le=10)
     persistence_mode: Literal["session", "persistent"] = "session"
     gemini_api_key: str | None = None
     user_id: str | None = None

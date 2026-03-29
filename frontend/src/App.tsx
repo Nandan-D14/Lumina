@@ -147,7 +147,7 @@ export default function App() {
         options: {
           allow_web_research: allowWebSearch,
           allow_scraping: true,
-          max_visualizations: 3,
+          max_visualizations: 6,
           persistence_mode: persistenceMode,
           gemini_api_key: geminiApiKey.trim(),
         }

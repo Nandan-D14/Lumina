@@ -20,7 +20,7 @@ class Settings:
     cors_origins: tuple[str, ...] = ("*",)
     http_timeout_seconds: float = float(os.getenv("HTTP_TIMEOUT_SECONDS", "20"))
     scrape_max_chars: int = int(os.getenv("SCRAPE_MAX_CHARS", "12000"))
-    max_visualizations: int = int(os.getenv("MAX_VISUALIZATIONS", "4"))
+    max_visualizations: int = int(os.getenv("MAX_VISUALIZATIONS", "8"))
     default_user_id: str = os.getenv("DEFAULT_USER_ID", "user")
 
     def has_google_auth(self) -> bool:

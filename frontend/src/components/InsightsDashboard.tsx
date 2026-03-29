@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { InsightPackage, Visualization } from '../types';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend, ArcElement } from 'chart.js';
 import { Bar, Line, Pie } from 'react-chartjs-2';
@@ -14,8 +14,61 @@ interface InsightsDashboardProps {
   onSampleClick?: (prompt: string) => void;
 }
 
+const TAILWIND_CDN_SCRIPT_RE = /<script\b[^>]*src=["']https?:\/\/cdn\.tailwindcss\.com[^"']*["'][^>]*><\/script>/gi;
+const INLINE_SCRIPT_RE = /<script\b(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi;
+
+function prepareAdvancedReport(rawReport: string | null | undefined): { srcDoc: string | null; warnings: string[] } {
+  if (!rawReport || !rawReport.trim()) {
+    return { srcDoc: null, warnings: [] };
+  }
+
+  const warnings: string[] = [];
+  let normalized = rawReport.trim();
+  const withoutTailwind = normalized.replace(TAILWIND_CDN_SCRIPT_RE, '');
+
+  if (withoutTailwind !== normalized) {
+    warnings.push('Removed Tailwind CDN script from advanced report preview.');
+    normalized = withoutTailwind;
+  }
+
+  INLINE_SCRIPT_RE.lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = INLINE_SCRIPT_RE.exec(normalized)) !== null) {
+    const scriptBody = (match[1] || '').trim();
+    if (!scriptBody) {
+      continue;
+    }
+    try {
+      // Parse only; do not execute.
+      // eslint-disable-next-line no-new-func
+      new Function(scriptBody);
+    } catch {
+      warnings.push('Advanced report JavaScript may be partially invalid. Rendering in best-effort mode.');
+    }
+  }
+
+  return { srcDoc: normalized, warnings };
+}
+
 export function InsightsDashboard({ data, isLoading, liveSteps = [], onSampleClick }: InsightsDashboardProps) {
   const [chartOverride, setChartOverride] = useState<'bar' | 'line' | 'pie'>('bar');
+  const [advancedReportWarning, setAdvancedReportWarning] = useState<string | null>(null);
+
+  const chartVisualizations = useMemo(() => {
+    if (!data) return [];
+    return (data.visualizations || []).filter(
+      (vis) => vis.kind !== 'table' && Array.isArray(vis.labels) && Array.isArray(vis.values) && vis.labels.length > 0 && vis.values.length > 0,
+    );
+  }, [data]);
+
+  const preparedAdvancedReport = useMemo(
+    () => prepareAdvancedReport(data?.advanced_html_report),
+    [data?.advanced_html_report],
+  );
+
+  useEffect(() => {
+    setAdvancedReportWarning(null);
+  }, [preparedAdvancedReport.srcDoc]);
 
   if (isLoading) {
     return (
@@ -95,7 +148,10 @@ export function InsightsDashboard({ data, isLoading, liveSteps = [], onSampleCli
             </button>
           </div>
         </div>
-        );
+    );
+  }
+
+  const renderChart = (vis: Visualization) => {
     if (!vis.labels || !vis.values) return null;
     
     // Auto-override to Pie if the ADK suggests pie internally, else allow manual override
@@ -143,15 +199,42 @@ export function InsightsDashboard({ data, isLoading, liveSteps = [], onSampleCli
     );
   };
 
-  const chartVisualizations = (data.visualizations || []).filter(
-    (vis) => vis.kind !== 'table' && Array.isArray(vis.labels) && Array.isArray(vis.values) && vis.labels.length > 0 && vis.values.length > 0,
-  );
+  const handleAdvancedReportLoad = (event: React.SyntheticEvent<HTMLIFrameElement>) => {
+    try {
+      const doc = event.currentTarget.contentDocument;
+      if (!doc) {
+        setAdvancedReportWarning('Advanced report loaded, but preview inspection is unavailable.');
+        return;
+      }
+
+      // Give embedded scripts a short window to initialize charts.
+      window.setTimeout(() => {
+        try {
+          const hasCanvas = !!doc.querySelector('canvas');
+          const hasSvg = !!doc.querySelector('svg');
+          const bodyText = (doc.body?.innerText || '').toLowerCase();
+          const hasNoDataMarker = bodyText.includes('no chart-ready visualization data');
+
+          if ((!hasCanvas && !hasSvg) || hasNoDataMarker) {
+            setAdvancedReportWarning('Advanced report rendered without visible charts. Showing structured charts below when available.');
+            return;
+          }
+
+          setAdvancedReportWarning(null);
+        } catch {
+          setAdvancedReportWarning('Advanced report loaded, but chart preview validation failed.');
+        }
+      }, 300);
+    } catch {
+      setAdvancedReportWarning('Advanced report loaded, but chart preview validation failed.');
+    }
+  };
 
   return (
     <div className="w-full space-y-6 pb-20 animate-in fade-in slide-in-from-bottom-4 duration-500">
 
       {/* Advanced Code Run (If present) */}
-      {data.advanced_html_report && (
+      {(data.advanced_html_report || preparedAdvancedReport.warnings.length > 0) && (
         <div className="apple-card p-6 flex flex-col gap-4 border border-blue-100 bg-blue-50/10">
           <div className="flex items-center gap-2">
             <Sparkles className="text-purple-500" size={20} />
@@ -160,14 +243,26 @@ export function InsightsDashboard({ data, isLoading, liveSteps = [], onSampleCli
           <p className="text-sm text-gray-500">
             This module was dynamically generated and rendered live by the ADK pipeline.
           </p>
-          <div className="w-full overflow-hidden rounded-xl bg-white border border-gray-100 shadow-inner">
-            <iframe 
-               srcDoc={data.advanced_html_report}
-               className="w-full"
-               style={{ height: '700px' }}
-               sandbox="allow-scripts allow-same-origin"
-            />
-          </div>
+          {preparedAdvancedReport.srcDoc ? (
+            <div className="w-full overflow-hidden rounded-xl bg-white border border-gray-100 shadow-inner">
+              <iframe
+                 srcDoc={preparedAdvancedReport.srcDoc}
+                 className="w-full"
+                 style={{ height: '700px' }}
+                 sandbox="allow-scripts"
+                 onLoad={handleAdvancedReportLoad}
+              />
+            </div>
+          ) : (
+            <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+              Advanced report preview was skipped due to invalid generated HTML/JS. Structured results are still rendered below.
+            </div>
+          )}
+          {[...preparedAdvancedReport.warnings, ...(advancedReportWarning ? [advancedReportWarning] : [])].map((warning, idx) => (
+            <div key={`${warning}-${idx}`} className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+              {warning}
+            </div>
+          ))}
         </div>
       )}
 
