@@ -491,7 +491,21 @@ class InsightOrchestrator:
         content_type = response.headers.get("content-type", "").lower()
         body = response.text.lstrip().lower()
         is_html = "text/html" in content_type or body.startswith("<!doctype html") or body.startswith("<html")
-        return response.status_code in {404, 405} or (response.status_code >= 400 and is_html)
+        if response.status_code in {404, 405} or (response.status_code >= 400 and is_html):
+            return True
+
+        if response.status_code == 400:
+            # Some Kilo gateway variants return JSON 400 "Invalid path" for base URLs.
+            invalid_path_markers = (
+                "invalid path",
+                "only accepts the path",
+                "/chat/completions",
+            )
+            lowered = response.text.lower()
+            if all(marker in lowered for marker in invalid_path_markers):
+                return True
+
+        return False
 
     async def _post_kilo_request(self, payload: dict[str, Any]) -> httpx.Response:
         candidates = self._kilo_endpoint_candidates()
