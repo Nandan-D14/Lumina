@@ -1,0 +1,63 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    background-color: #FDFDFD;
+    color: #1D1D1F;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro", "Inter", "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  
+  ::selection {
+    background-color: #DBEAFE;
+    color: #1E3A8A;
+  }
+}
+
+.apple-card {
+  background-color: white;
+  border-radius: 1.5rem;
+  border: 1px solid #f3f4f6;
+  overflow: hidden;
+  box-shadow: 0 4px 24px -6px rgba(0, 0, 0, 0.04), 0 0 1px 0 rgba(0, 0, 0, 0.06);
+}
+
+.apple-glass {
+  background-color: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(24px);
+  border-right: 1px solid rgba(243, 244, 246, 0.5);
+}
+
+.apple-button {
+  border-radius: 9999px;
+  background-color: #007AFF;
+  color: white;
+  font-weight: 500;
+  transition: all 0.2s ease-out;
+  box-shadow: 0 2px 10px rgba(0, 122, 255, 0.2);
+}
+.apple-button:hover {
+  background-color: #0066D6;
+}
+.apple-button:active {
+  transform: scale(0.95);
+}
+
+/* Custom Webkit scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background-color: #E5E5EA;
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: #D1D1D6;
+}
+
+html.dark { filter: invert(0.92) hue-rotate(180deg); background: #000; }
+html.dark img, html.dark iframe, html.dark canvas, html.dark video { filter: invert(1) hue-rotate(180deg); }

@@ -1,0 +1,7 @@
+        state[state_keys.COMBINED_CITATIONS_JSON] = state[state_keys.INITIAL_CITATIONS_JSON]
+        state["ingestion_branch"] = "{}"
+        state["research_branch"] = "{}"
+        state["insights_branch"] = "{}"
+        state["entities_branch"] = "{}"
+        state["visualizations_branch"] = "{}"
+        state["table_reasoner_branch"] = "{}"
