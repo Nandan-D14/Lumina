@@ -1,4 +1,4 @@
-# VibeVisualize Backend Orchestrator
+# Lumina Backend Orchestrator
 
 This project now uses a dedicated `backend/` package for the server and ADK orchestration layer. The backend accepts text, CSV, JSON, PDF, and URL sources, then builds an insight package with summaries, metrics, entities, tables, visualizations, citations, and artifacts.
 
