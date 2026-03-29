@@ -57,7 +57,7 @@ class InsightOrchestrator:
                 detail="Persistent mode requires DATABASE_URL to be configured on the backend.",
             )
 
-        if self._settings.has_kilo_code_auth():
+        if self._settings.has_kilo_auth():
             return await self._analyze_with_kilo_code(request, user_id)
 
         if request_api_key is None:
@@ -208,7 +208,7 @@ class InsightOrchestrator:
         }
 
         headers = {
-            "Authorization": f"Bearer {self._settings.kilo_code_api_key}",
+            "Authorization": f"Bearer {self._settings.kilo_code_api}",
             "Content-Type": "application/json",
         }
 
@@ -308,7 +308,7 @@ class InsightOrchestrator:
             yield json.dumps({"type": "error", "message": "Persistent mode requires DATABASE_URL to be configured on the backend."}) + "\n"
             return
 
-        if self._settings.has_kilo_code_auth():
+        if self._settings.has_kilo_auth():
             async for chunk in self._analyze_stream_with_kilo_code(request, user_id):
                 yield chunk
             return
@@ -411,7 +411,7 @@ class InsightOrchestrator:
         user_prompt = f"User prompt:\n{request.prompt}\n\nNormalized corpus:\n{corpus}\n\nTables JSON:\n{json.dumps([table.model_dump(mode='json') for table in ingestion.tables], ensure_ascii=False)}\n\nMax visualizations: {request.options.max_visualizations}"
 
         payload = {"model": self._settings.kilo_code_model, "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}], "temperature": 0.2}
-        headers = {"Authorization": f"Bearer {self._settings.kilo_code_api_key}", "Content-Type": "application/json"}
+        headers = {"Authorization": f"Bearer {self._settings.kilo_code_api}", "Content-Type": "application/json"}
 
         try:
             async with httpx.AsyncClient(timeout=self._settings.http_timeout_seconds * 2) as client:
