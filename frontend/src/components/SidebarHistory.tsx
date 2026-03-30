@@ -1,5 +1,5 @@
 import React from 'react';
-import { History, LayoutTemplate, Clock, ChevronRight, Trash2 } from 'lucide-react';
+import { History, LayoutTemplate, Clock, Trash2 } from 'lucide-react';
 import { HistoryEntry } from '../types';
 
 interface SidebarHistoryProps {
@@ -41,9 +41,19 @@ export function SidebarHistory({ history, onSelect, onDelete, currentId }: Sideb
               const isSelected = currentId === entry.id;
 
               return (
-                <button
+                <div
                   key={entry.id}
+                  role="button"
+                  tabIndex={0}
+                  aria-pressed={isSelected}
                   onClick={() => onSelect(entry)}
+                  onKeyDown={(e) => {
+                    if (e.target !== e.currentTarget) return;
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      onSelect(entry);
+                    }
+                  }}
                   className={`w-full text-left p-3 rounded-2xl border transition-all duration-200 group relative ${
                     isSelected 
                       ? 'bg-white border-gray-200 shadow-sm' 
@@ -71,7 +81,7 @@ export function SidebarHistory({ history, onSelect, onDelete, currentId }: Sideb
                     <Clock size={12} />
                     {d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • {d.toLocaleDateString([], { month: 'short', day: 'numeric' })}
                   </div>
-                </button>
+                </div>
               );
             })}
           </div>
