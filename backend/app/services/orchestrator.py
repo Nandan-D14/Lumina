@@ -57,8 +57,8 @@ class InsightOrchestrator:
                 detail="Persistent mode requires DATABASE_URL to be configured on the backend.",
             )
 
-        if self._settings.has_openrouter_auth():
-            return await self._analyze_with_openrouter(request, user_id)
+        if self._settings.has_nvidia_auth():
+            return await self._analyze_with_nvidia(request, user_id)
 
         if request_api_key is None:
             raise HTTPException(status_code=400, detail="Gemini API key is required. Set options.gemini_api_key.")
@@ -178,7 +178,7 @@ class InsightOrchestrator:
         )
         return final_package
 
-    async def _analyze_with_openrouter(self, request: AnalyzeRequest, user_id: str) -> InsightPackage:
+    async def _analyze_with_nvidia(self, request: AnalyzeRequest, user_id: str) -> InsightPackage:
         ingestion = await self._ingestion.prepare(request, user_id)
 
         system_prompt = (
@@ -205,7 +205,7 @@ class InsightOrchestrator:
         )
 
         payload = {
-            "model": self._settings.openrouter_model,
+            "model": self._settings.nvidia_model,
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
@@ -213,34 +213,34 @@ class InsightOrchestrator:
             "temperature": 0.2,
         }
 
-        response = await self._post_openrouter_request(payload)
+        response = await self._post_nvidia_request(payload)
 
         if response.status_code == 429:
-            raise HTTPException(status_code=429, detail="OpenRouter quota/rate limit exceeded. Retry shortly or update plan limits.")
+            raise HTTPException(status_code=429, detail="nvidia quota/rate limit exceeded. Retry shortly or update plan limits.")
         if response.status_code in {401, 403}:
-            raise HTTPException(status_code=401, detail="OpenRouter credentials are invalid or unauthorized.")
+            raise HTTPException(status_code=401, detail="nvidia credentials are invalid or unauthorized.")
         if response.status_code >= 400:
             detail = response.text.strip()
-            raise HTTPException(status_code=502, detail=f"OpenRouter failed ({response.status_code}): {detail[:600]}")
+            raise HTTPException(status_code=502, detail=f"nvidia failed ({response.status_code}): {detail[:600]}")
 
         try:
             response_json = response.json()
             content = response_json["choices"][0]["message"]["content"]
         except Exception as exc:
-            raise HTTPException(status_code=502, detail="OpenRouter returned an unexpected response shape.") from exc
+            raise HTTPException(status_code=502, detail="nvidia returned an unexpected response shape.") from exc
 
         parsed = self._extract_json_payload(content)
         if parsed is None:
             parsed = self._build_fallback_payload_from_text(content)
 
-        sanitized = self._sanitize_openrouter_payload(parsed, request.options.max_visualizations)
-        enriched = self._enrich_openrouter_payload(sanitized, ingestion.tables, request.options.max_visualizations)
+        sanitized = self._sanitize_nvidia_payload(parsed, request.options.max_visualizations)
+        enriched = self._enrich_nvidia_payload(sanitized, ingestion.tables, request.options.max_visualizations)
 
         package_payload = {
             "analysis_id": ingestion.analysis_id,
             "session_id": ingestion.session_id,
             "persistence_mode": request.options.persistence_mode,
-            "summary": str(enriched.get("summary") or "Analysis completed via OpenRouter."),
+            "summary": str(enriched.get("summary") or "Analysis completed via nvidia."),
             "advanced_html_report": enriched.get("advanced_html_report"),
             "insights": enriched.get("insights", []),
             "metrics": enriched.get("metrics", []),
@@ -258,7 +258,7 @@ class InsightOrchestrator:
                 "analysis_id": ingestion.analysis_id,
                 "session_id": ingestion.session_id,
                 "persistence_mode": request.options.persistence_mode,
-                "summary": str(enriched.get("summary") or "Analysis completed via OpenRouter."),
+                "summary": str(enriched.get("summary") or "Analysis completed via nvidia."),
                 "advanced_html_report": enriched.get("advanced_html_report"),
                 "insights": enriched.get("insights", []),
                 "metrics": [],
@@ -305,8 +305,8 @@ class InsightOrchestrator:
             yield json.dumps({"type": "error", "message": "Persistent mode requires DATABASE_URL to be configured on the backend."}) + "\n"
             return
 
-        if self._settings.has_openrouter_auth():
-            async for chunk in self._analyze_stream_with_openrouter(request, user_id):
+        if self._settings.has_nvidia_auth():
+            async for chunk in self._analyze_stream_with_nvidia(request, user_id):
                 yield chunk
             return
 
@@ -388,7 +388,7 @@ class InsightOrchestrator:
             message = " | ".join(msg for msg in messages if msg) or str(exc)
             yield json.dumps({"type": "step", "message": f"Warning: analysis returned but persistence failed: {message}"}) + "\n"
 
-    async def _analyze_stream_with_openrouter(self, request: AnalyzeRequest, user_id: str) -> "AsyncGenerator[str, None]":
+    async def _analyze_stream_with_nvidia(self, request: AnalyzeRequest, user_id: str) -> "AsyncGenerator[str, None]":
         from typing import AsyncGenerator
         yield json.dumps({"type": "step", "message": "Preparing session and ingesting sources..."}) + "\n"
         try:
@@ -414,7 +414,7 @@ class InsightOrchestrator:
 
         yield json.dumps({"type": "step", "message": "Profiling extracted data for metrics and chart candidates..."}) + "\n"
         await asyncio.sleep(0.05)
-        yield json.dumps({"type": "step", "message": f"Querying standard engine ({self._settings.openrouter_model})..."}) + "\n"
+        yield json.dumps({"type": "step", "message": f"Querying standard engine ({self._settings.nvidia_model})..."}) + "\n"
         system_prompt = (
             "You are a strict data analysis assistant. Return ONLY valid JSON with keys: "
             "summary (string), insights (string[]), metrics ({label, value}[]), "
@@ -433,9 +433,9 @@ class InsightOrchestrator:
         )
         user_prompt = f"User prompt:\n{request.prompt}\n\nNormalized corpus:\n{corpus}\n\nTables JSON:\n{json.dumps([table.model_dump(mode='json') for table in ingestion.tables], ensure_ascii=False)}\n\nMax visualizations: {request.options.max_visualizations}"
 
-        payload = {"model": self._settings.openrouter_model, "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}], "temperature": 0.2}
+        payload = {"model": self._settings.nvidia_model, "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}], "temperature": 0.2, "max_tokens": 16384}
         try:
-            request_task = asyncio.create_task(self._post_openrouter_request(payload))
+            request_task = asyncio.create_task(self._post_nvidia_request(payload))
             heartbeat_messages = [
                 "Model is reading normalized sources...",
                 "Model is computing metrics and trend deltas...",
@@ -454,14 +454,14 @@ class InsightOrchestrator:
             return
 
         if response.status_code >= 400:
-            yield json.dumps({"type": "error", "message": f"OpenRouter failed ({response.status_code}): {response.text[:600]}"}) + "\n"
+            yield json.dumps({"type": "error", "message": f"nvidia failed ({response.status_code}): {response.text[:600]}"}) + "\n"
             return
 
         try:
             obj = response.json()
             content = obj["choices"][0]["message"]["content"]
         except Exception:
-            yield json.dumps({"type": "error", "message": "OpenRouter returned unexpected response."}) + "\n"
+            yield json.dumps({"type": "error", "message": "nvidia returned unexpected response."}) + "\n"
             return
             
         yield json.dumps({"type": "step", "message": "Parsing structured response and validating schema..."}) + "\n"
@@ -470,8 +470,8 @@ class InsightOrchestrator:
             yield json.dumps({"type": "step", "message": "Model returned non-JSON content; building resilient structured fallback..."}) + "\n"
             parsed = self._build_fallback_payload_from_text(content)
 
-        sanitized = self._sanitize_openrouter_payload(parsed, request.options.max_visualizations)
-        enriched = self._enrich_openrouter_payload(sanitized, ingestion.tables, request.options.max_visualizations)
+        sanitized = self._sanitize_nvidia_payload(parsed, request.options.max_visualizations)
+        enriched = self._enrich_nvidia_payload(sanitized, ingestion.tables, request.options.max_visualizations)
         yield json.dumps({"type": "step", "message": "Building visualization layer and detailed report..."}) + "\n"
 
         package_payload = {"analysis_id": ingestion.analysis_id, "session_id": ingestion.session_id, "persistence_mode": request.options.persistence_mode, "summary": str(enriched.get("summary") or "Analysis done."), "advanced_html_report": enriched.get("advanced_html_report"), "insights": enriched.get("insights", []), "metrics": enriched.get("metrics", []), "entities": enriched.get("entities", []), "tables": [table.model_dump(mode="json") for table in ingestion.tables], "visualizations": enriched.get("visualizations", []), "citations": [citation.model_dump(mode="json") for citation in ingestion.citations], "artifacts": [artifact.model_dump(mode="json") for artifact in ingestion.artifact_context.artifacts]}
@@ -502,9 +502,9 @@ class InsightOrchestrator:
             message = " | ".join(msg for msg in messages if msg) or str(exc)
             yield json.dumps({"type": "step", "message": f"Warning: analysis returned but persistence failed: {message}"}) + "\n"
 
-    def _openrouter_endpoint_candidates(self) -> list[str]:
+    def _nvidia_endpoint_candidates(self) -> list[str]:
         # Always strip trailing slashes
-        endpoint = self._settings.openrouter_endpoint.strip().rstrip("/")
+        endpoint = self._settings.nvidia_endpoint.strip().rstrip("/")
         if not endpoint:
             return []
 
@@ -530,7 +530,7 @@ class InsightOrchestrator:
             return True
 
         if response.status_code == 400:
-            # Some OpenRouter gateway variants return JSON 400 "Invalid path" for base URLs.
+            # Some nvidia gateway variants return JSON 400 "Invalid path" for base URLs.
             invalid_path_markers = (
                 "invalid path",
                 "only accepts the path",
@@ -547,13 +547,13 @@ class InsightOrchestrator:
 
         return False
 
-    async def _post_openrouter_request(self, payload: dict[str, Any]) -> httpx.Response:
-        candidates = self._openrouter_endpoint_candidates()
+    async def _post_nvidia_request(self, payload: dict[str, Any]) -> httpx.Response:
+        candidates = self._nvidia_endpoint_candidates()
         if not candidates:
-            raise HTTPException(status_code=500, detail="OpenRouter endpoint is not configured.")
+            raise HTTPException(status_code=500, detail="nvidia endpoint is not configured.")
 
         headers = {
-            "Authorization": f"Bearer {self._settings.openrouter_api_key}",
+            "Authorization": f"Bearer {self._settings.nvidia_api_key}",
             "Content-Type": "application/json",
             "Accept": "application/json",
             "User-Agent": "curl/8.7.1",
@@ -587,15 +587,15 @@ class InsightOrchestrator:
             raise HTTPException(
                 status_code=502,
                 detail=(
-                    f"OpenRouter endpoint appears invalid (status {error_resp.status_code}). "
+                    f"nvidia endpoint appears invalid (status {error_resp.status_code}). "
                     f"Tried: {', '.join(candidates)}. Response preview: {preview}"
                 ),
             )
 
         if last_exception is not None:
-            raise HTTPException(status_code=502, detail=f"OpenRouter request failed: {last_exception}") from last_exception
+            raise HTTPException(status_code=502, detail=f"nvidia request failed: {last_exception}") from last_exception
 
-        raise HTTPException(status_code=502, detail=f"OpenRouter request failed. Tried endpoints: {', '.join(candidates)}")
+        raise HTTPException(status_code=502, detail=f"nvidia request failed. Tried endpoints: {', '.join(candidates)}")
 
     def artifact_context_for(self, analysis_id: str) -> ArtifactContext:
         stored = self._repository.get(analysis_id)
@@ -675,7 +675,7 @@ class InsightOrchestrator:
 
     @staticmethod
     def _extract_json_payload(content: Any) -> dict | None:
-        text = InsightOrchestrator._coerce_openrouter_content(content)
+        text = InsightOrchestrator._coerce_nvidia_content(content)
         if not text:
             return None
 
@@ -718,7 +718,7 @@ class InsightOrchestrator:
         return None
 
     @staticmethod
-    def _coerce_openrouter_content(content: Any) -> str:
+    def _coerce_nvidia_content(content: Any) -> str:
         if content is None:
             return ""
         if isinstance(content, str):
@@ -748,7 +748,7 @@ class InsightOrchestrator:
 
     @staticmethod
     def _build_fallback_payload_from_text(content: Any) -> dict[str, Any]:
-        raw = InsightOrchestrator._coerce_openrouter_content(content)
+        raw = InsightOrchestrator._coerce_nvidia_content(content)
         compact = re.sub(r"\s+", " ", raw).strip()
         if not compact:
             compact = "Model returned non-JSON output. Generated structured fallback from available context."
@@ -787,7 +787,7 @@ class InsightOrchestrator:
         }
 
     @staticmethod
-    def _sanitize_openrouter_payload(parsed: dict[str, Any], max_visualizations: int) -> dict[str, Any]:
+    def _sanitize_nvidia_payload(parsed: dict[str, Any], max_visualizations: int) -> dict[str, Any]:
         summary = str(parsed.get("summary") or "").strip()
         advanced_html_report = None
         raw_advanced_html_report = parsed.get("advanced_html_report")
@@ -887,7 +887,7 @@ class InsightOrchestrator:
         }
 
     @classmethod
-    def _enrich_openrouter_payload(
+    def _enrich_nvidia_payload(
         cls,
         sanitized: dict[str, Any],
         tables: list[TableData],

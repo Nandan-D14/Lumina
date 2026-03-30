@@ -14,11 +14,11 @@ class Settings:
     app_name: str = os.getenv("AGENT_APP_NAME", "insight_orchestrator")
     default_model: str = os.getenv("AGENT_MODEL", "gemini-3-flash-preview")
     database_url: str = os.getenv("DATABASE_URL", "")
-    openrouter_api_key: str = os.getenv("OPENROUTER_API_KEY", os.getenv("OPENROUTER_API_KEY_FALLBACK", "")).strip().strip("'\"").strip()
-    openrouter_model: str = os.getenv("OPENROUTER_MODEL", os.getenv("OPENROUTER_MODEL_FALLBACK", "")).strip().strip("'\"").strip()
-    openrouter_endpoint: str = os.getenv("OPENROUTER_URL", os.getenv("OPENROUTER_URL_FALLBACK", "https://openrouter.ai/api/v1")).strip().strip("'\"").strip()
+    nvidia_api_key: str = os.getenv("NVIDIA_API_KEY", "").strip().strip("'\"").strip()
+    nvidia_model: str = os.getenv("NVIDIA_MODEL", "").strip().strip("'\"").strip()
+    nvidia_endpoint: str = os.getenv("NVIDIA_API_URL", "https://integrate.api.nvidia.com/v1").strip().strip("'\"").strip()
     cors_origins: tuple[str, ...] = ("*",)
-    http_timeout_seconds: float = float(os.getenv("HTTP_TIMEOUT_SECONDS", "20"))
+    http_timeout_seconds: float = float(os.getenv("HTTP_TIMEOUT_SECONDS", "120"))
     scrape_max_chars: int = int(os.getenv("SCRAPE_MAX_CHARS", "12000"))
     max_visualizations: int = int(os.getenv("MAX_VISUALIZATIONS", "8"))
     default_user_id: str = os.getenv("DEFAULT_USER_ID", "user")
@@ -30,8 +30,8 @@ class Settings:
             or os.getenv("GOOGLE_CLOUD_PROJECT")
         )
 
-    def has_openrouter_auth(self) -> bool:
-        return bool(self.openrouter_api_key and self.openrouter_model and self.openrouter_endpoint)
+    def has_nvidia_auth(self) -> bool:
+        return bool(self.nvidia_api_key and self.nvidia_model and self.nvidia_endpoint)
 
 
 @lru_cache

@@ -70,8 +70,8 @@ Notes:
 
 Provider selection:
 
-- If `OPENROUTER_API_KEY` and `OPENROUTER_MODEL` are configured, backend routes analysis generation through OpenRouter.
-- Frontend still sends `options.gemini_api_key` for compatibility, but OpenRouter mode does not require that key to succeed.
+- If `NVIDIA_API_KEY` and `NVIDIA_MODEL` are configured, backend routes analysis generation through NVIDIA.
+- Frontend still sends `options.gemini_api_key` for compatibility, but NVIDIA mode does not require that key to succeed.
 
 ### `POST /api/v1/export`
 
@@ -112,10 +112,10 @@ For persistent mode:
 
 - `DATABASE_URL` (PostgreSQL/Neon connection string)
 
-Optional OpenRouter provider:
+Optional NVIDIA provider:
 
-- `OPENROUTER_API_KEY`
-- `OPENROUTER_MODEL`
+- `NVIDIA_API_KEY`
+- `NVIDIA_MODEL`
 
 Useful optional variables:
 
