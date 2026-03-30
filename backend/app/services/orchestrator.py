@@ -584,11 +584,15 @@ class InsightOrchestrator:
 
         if error_resp is not None:
             preview = error_resp.text.strip()[:180]
+            hint = ""
+            if error_resp.status_code == 404 and "404 page not found" in preview.lower():
+                hint = f" (Hint: NVIDIA API returns 404 when the model '{self._settings.nvidia_model}' does not exist on their servers. Please verify your NVIDIA_MODEL environment variable.)"
+                
             raise HTTPException(
                 status_code=502,
                 detail=(
                     f"nvidia endpoint appears invalid (status {error_resp.status_code}). "
-                    f"Tried: {', '.join(candidates)}. Response preview: {preview}"
+                    f"Tried: {', '.join(candidates)}. Response preview: {preview}{hint}"
                 ),
             )
 
