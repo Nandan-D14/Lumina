@@ -84,7 +84,7 @@ export default function App() {
 
     return normalized
       .replace(/nvidia_model/gi, DISPLAY_MODEL_NAME)
-      .replace(/moonshotai\/kimi-k2-thinking/gi, DISPLAY_MODEL_NAME)
+      .replace(/z-ai\/glm5/gi, DISPLAY_MODEL_NAME)
       .replace(/openrouter_model/gi, DISPLAY_MODEL_NAME)
       .replace(/nvidia\/nemotron-3-super-120b-a12b:free/gi, DISPLAY_MODEL_NAME)
       .replace(/stepfun\/step-3\.5-flash:free/gi, DISPLAY_MODEL_NAME);
