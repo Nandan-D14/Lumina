@@ -213,7 +213,32 @@ export default function App() {
       }
 
       if (!insightData) {
-        throw new Error("Stream closed before final results were returned.");
+        setLiveSteps((prev) => {
+          const retryStep = 'Streaming ended early. Retrying through standard endpoint...';
+          if (prev[prev.length - 1] === retryStep) {
+            return prev;
+          }
+          return [...prev, retryStep];
+        });
+
+        const fallbackRes = await fetch('/api/v1/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        if (!fallbackRes.ok) {
+          const fallbackError = await fallbackRes.text();
+          throw new Error(
+            `Stream closed before final results were returned. Fallback analyze failed (${fallbackRes.status})${fallbackError ? `: ${fallbackError}` : ''}`
+          );
+        }
+
+        try {
+          insightData = await fallbackRes.json() as InsightPackage;
+        } catch {
+          throw new Error('Stream closed before final results were returned, and fallback response was not valid JSON.');
+        }
       }
 
       const newEntry: HistoryEntry = {

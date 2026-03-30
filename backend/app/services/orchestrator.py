@@ -328,7 +328,6 @@ class InsightOrchestrator:
             return
 
         yield json.dumps({"type": "step", "message": "Evaluating prompt across AI agent graph..."}) + "\n"
-        session = await self._runner.session_service.get_session(app_name=self._settings.app_name, user_id=user_id, session_id=ingestion.session_id)
         kickoff = types.Content(role="user", parts=[types.Part(text="Produce the final insight package from the prepared session state.")])
 
         try:
@@ -366,15 +365,27 @@ class InsightOrchestrator:
             yield json.dumps({"type": "error", "message": f"Agent returned invalid structured data: {exc}"}) + "\n"
             return
 
-        merged_citations = self._merge_citations(package.citations, self._read_session_models(session, state_keys.COMBINED_CITATIONS_JSON, Citation))
-        merged_artifacts = self._merge_artifacts(package.artifacts, self._read_session_models(session, state_keys.ARTIFACT_REFS_JSON, ArtifactRef))
-        final_package = package.model_copy(update={"citations": merged_citations, "artifacts": merged_artifacts, "session_id": ingestion.session_id, "persistence_mode": request.options.persistence_mode})
+        try:
+            merged_citations = self._merge_citations(package.citations, self._read_session_models(session, state_keys.COMBINED_CITATIONS_JSON, Citation))
+            merged_artifacts = self._merge_artifacts(package.artifacts, self._read_session_models(session, state_keys.ARTIFACT_REFS_JSON, ArtifactRef))
+            final_package = package.model_copy(update={"citations": merged_citations, "artifacts": merged_artifacts, "session_id": ingestion.session_id, "persistence_mode": request.options.persistence_mode})
+            result_payload = final_package.model_dump(mode="json")
+        except Exception as exc:
+            messages = self._collect_exception_messages(exc)
+            message = " | ".join(msg for msg in messages if msg) or str(exc)
+            yield json.dumps({"type": "error", "message": f"Failed to assemble final response: {message}"}) + "\n"
+            return
 
-        artifact_context = ArtifactContext(runner=self._runner, app_name=self._settings.app_name, user_id=user_id, session_id=ingestion.session_id, artifacts=list(merged_artifacts))
-        final_ref = await artifact_context.save_text(f"analyses/{final_package.analysis_id}.json", json.dumps(final_package.model_dump(mode="json"), ensure_ascii=False, indent=2) + "\n", "application/json")
-        self._repository.save(StoredAnalysis(analysis_id=final_package.analysis_id, user_id=user_id, session_id=ingestion.session_id, filename=final_ref.name, version=final_ref.version))
+        yield json.dumps({"type": "result", "data": result_payload}) + "\n"
 
-        yield json.dumps({"type": "result", "data": final_package.model_dump(mode="json")}) + "\n"
+        try:
+            artifact_context = ArtifactContext(runner=self._runner, app_name=self._settings.app_name, user_id=user_id, session_id=ingestion.session_id, artifacts=list(merged_artifacts))
+            final_ref = await artifact_context.save_text(f"analyses/{final_package.analysis_id}.json", json.dumps(result_payload, ensure_ascii=False, indent=2) + "\n", "application/json")
+            self._repository.save(StoredAnalysis(analysis_id=final_package.analysis_id, user_id=user_id, session_id=ingestion.session_id, filename=final_ref.name, version=final_ref.version))
+        except Exception as exc:
+            messages = self._collect_exception_messages(exc)
+            message = " | ".join(msg for msg in messages if msg) or str(exc)
+            yield json.dumps({"type": "step", "message": f"Warning: analysis returned but persistence failed: {message}"}) + "\n"
 
     async def _analyze_stream_with_openrouter(self, request: AnalyzeRequest, user_id: str) -> "AsyncGenerator[str, None]":
         from typing import AsyncGenerator
@@ -390,7 +401,13 @@ class InsightOrchestrator:
             yield json.dumps({"type": "step", "message": "Web search activated: Finding context..."}) + "\n"
             from ..tools.google_search import google_search_tool
             # We must use run_in_executor if google_search_tool is fully sync but let's just call it
-            search_summary = google_search_tool(request.prompt)
+            try:
+                search_summary = google_search_tool(request.prompt)
+            except Exception as exc:
+                messages = self._collect_exception_messages(exc)
+                message = " | ".join(msg for msg in messages if msg) or str(exc)
+                yield json.dumps({"type": "error", "message": f"Web search failed: {message}"}) + "\n"
+                return
             corpus += f"\n\n[Web Search Context]\n{search_summary}\n"
             yield json.dumps({"type": "step", "message": "Web context acquired."}) + "\n"
 
@@ -473,10 +490,16 @@ class InsightOrchestrator:
                 yield json.dumps({"type": "error", "message": f"Could not validate response package: {inner_e}"}) + "\n"
                 return
 
-        final_ref = await ingestion.artifact_context.save_text(f"analyses/{final_package.analysis_id}.json", json.dumps(final_package.model_dump(mode="json"), ensure_ascii=False, indent=2) + "\n", "application/json")
-        self._repository.save(StoredAnalysis(analysis_id=final_package.analysis_id, user_id=user_id, session_id=ingestion.session_id, filename=final_ref.name, version=final_ref.version))
+        result_payload = final_package.model_dump(mode="json")
+        yield json.dumps({"type": "result", "data": result_payload}) + "\n"
 
-        yield json.dumps({"type": "result", "data": final_package.model_dump(mode="json")}) + "\n"
+        try:
+            final_ref = await ingestion.artifact_context.save_text(f"analyses/{final_package.analysis_id}.json", json.dumps(result_payload, ensure_ascii=False, indent=2) + "\n", "application/json")
+            self._repository.save(StoredAnalysis(analysis_id=final_package.analysis_id, user_id=user_id, session_id=ingestion.session_id, filename=final_ref.name, version=final_ref.version))
+        except Exception as exc:
+            messages = self._collect_exception_messages(exc)
+            message = " | ".join(msg for msg in messages if msg) or str(exc)
+            yield json.dumps({"type": "step", "message": f"Warning: analysis returned but persistence failed: {message}"}) + "\n"
 
     def _openrouter_endpoint_candidates(self) -> list[str]:
         # Always strip trailing slashes
