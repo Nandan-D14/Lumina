@@ -327,7 +327,7 @@ class InsightOrchestrator:
             yield json.dumps({"type": "error", "message": str(e)}) + "\n"
             return
 
-        yield json.dumps({"type": "step", "message": "Evaluating prompt across AI agent graph..."}) + "\n"
+        yield json.dumps({"type": "step", "message": "Evaluating prompt across AI agent graph...", "_pad": " " * 1024}) + "\n"
         kickoff = types.Content(role="user", parts=[types.Part(text="Produce the final insight package from the prepared session state.")])
 
         try:
@@ -340,9 +340,10 @@ class InsightOrchestrator:
                         event_type = type(_event).__name__
                         agent_name = getattr(_event, "agent_name", "System")
                         if agent_name:
-                            yield json.dumps({"type": "step", "message": f"{agent_name.capitalize()} agent is computing..."}) + "\n"
+                            msg = f"{agent_name.capitalize()} agent is computing..."
                         else:
-                            yield json.dumps({"type": "step", "message": f"Processing {event_type}..."}) + "\n"
+                            msg = f"Processing {event_type}..."
+                        yield json.dumps({"type": "step", "message": msg, "_pad": " " * 1024}) + "\n"
                         await asyncio.sleep(0.01)
                 finally:
                     if previous_key: os.environ["GOOGLE_API_KEY"] = previous_key
@@ -353,7 +354,7 @@ class InsightOrchestrator:
             yield json.dumps({"type": "error", "message": f"Model pipeline failed: {message}"}) + "\n"
             return
 
-        yield json.dumps({"type": "step", "message": "Assembling final insights..."}) + "\n"
+        yield json.dumps({"type": "step", "message": "Assembling final insights...", "_pad": " " * 1024}) + "\n"
         session = await self._runner.session_service.get_session(app_name=self._settings.app_name, user_id=user_id, session_id=ingestion.session_id)
         if session is None or "final_insight_package" not in session.state:
             yield json.dumps({"type": "error", "message": "Agent did not produce a final insight package."}) + "\n"
@@ -444,9 +445,9 @@ class InsightOrchestrator:
             heartbeat_index = 0
             while not request_task.done():
                 heartbeat = heartbeat_messages[min(heartbeat_index, len(heartbeat_messages) - 1)]
-                yield json.dumps({"type": "step", "message": heartbeat}) + "\n"
+                yield json.dumps({"type": "step", "message": heartbeat, "_pad": " " * 1024}) + "\n"
                 heartbeat_index += 1
-                await asyncio.sleep(1.2)
+                await asyncio.sleep(1.0)
             response = await request_task
         except HTTPException as exc:
             yield json.dumps({"type": "error", "message": str(exc.detail)}) + "\n"
